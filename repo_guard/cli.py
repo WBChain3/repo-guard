@@ -21,6 +21,7 @@ from repo_guard.github_client import GitHubClient, GitHubClientError, NotFoundEr
 from repo_guard.models import Severity, Finding, ModuleResult, ScanResult, highest_severity
 from repo_guard.modules.trust_score import scan as trust_score_scan
 from repo_guard.modules.hook_scanner import scan as hook_scanner_scan
+from repo_guard.modules.vscode_scanner import scan as vscode_scanner_scan
 from repo_guard.reporter import render_scan_result
 
 
@@ -37,19 +38,7 @@ def _run_hook_scanner(client: GitHubClient, owner: str, repo: str) -> ModuleResu
 
 
 def _run_vscode_scanner(client: GitHubClient, owner: str, repo: str) -> ModuleResult:
-    """Stub: placeholder for vscode_scanner module."""
-    # TODO: Implement in Phase 3
-    return ModuleResult(
-        module_name="vscode_scanner",
-        severity=Severity.INFO,
-        findings=[
-            Finding(
-                message="VS Code scanner module not yet implemented. Skipping.",
-                severity=Severity.INFO,
-            )
-        ],
-        raw_data={},
-    )
+    return vscode_scanner_scan(client, owner, repo)
 
 
 def _run_ioc_extractor(
