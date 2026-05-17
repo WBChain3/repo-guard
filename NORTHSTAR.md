@@ -380,7 +380,7 @@ Minimal. No frameworks, no heavy deps. Pure Python 3.10+.
 
 ### `tests/fixtures/flexpay_mock/`
 Static replica of the FlexPay attack chain. Loaded from disk in tests. **No network calls.**
-- `.githooks/post-checkoput`: 40+ lines of shell comments with 6 lines of payload (curl | bash, output suppression)
+- `.githooks/post-checkout`: 40+ lines of shell comments with 6 lines of payload (curl | bash, output suppression)
 - `.vscode/tasks.json`: `runOn: folderOpen` + shell task
 - `.vscode/settings.json`: `task.allowAutomaticTasks: on`
 
