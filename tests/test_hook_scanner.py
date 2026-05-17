@@ -108,11 +108,10 @@ class TestHookScannerFlexPay:
         assert len(b64_findings) >= 1
 
     def test_flexpay_hook_comment_ratio_flagged(self):
-        """FlexPay's 40+ lines of decoy comments with payload should trigger ratio heuristic."""
+        """FlexPay's ~84% decoy comments + network command should trigger 70% ratio heuristic."""
         flexpay_hook = _load_fixture_file(".githooks/post-checkout")
         ratio = _calculate_comment_ratio(flexpay_hook)
-        # FlexPay fixture has lots of comments and some payload lines.
-        assert ratio > 0.0
+        assert ratio > 0.7, f"Expected ratio > 0.7 for FlexPay fixture, got {ratio}"
 
         mock_tree = [
             {"path": ".githooks/post-checkout", "type": "blob", "sha": "abc", "size": 500},
@@ -124,7 +123,12 @@ class TestHookScannerFlexPay:
 
         result = scan(client, "flexpay", "repo")
         ratio_findings = [f for f in result.findings if "comment-to-code" in f.message.lower()]
-        assert len(ratio_findings) >= 0  # At minimum this should not crash
+        assert len(ratio_findings) >= 1, (
+            f"Expected at least 1 comment-ratio finding, got: {ratio_findings}"
+        )
+        assert "84%" in ratio_findings[0].message or "85%" in ratio_findings[0].message, (
+            f"Ratio finding message should reference the percentage: {ratio_findings[0].message}"
+        )
 
 
 # ---------------------------------------------------------------------------

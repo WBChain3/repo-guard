@@ -22,6 +22,7 @@ from repo_guard.models import Severity, Finding, ModuleResult, ScanResult, highe
 from repo_guard.modules.trust_score import scan as trust_score_scan
 from repo_guard.modules.hook_scanner import scan as hook_scanner_scan
 from repo_guard.modules.vscode_scanner import scan as vscode_scanner_scan
+from repo_guard.modules.ioc_extractor import scan as ioc_extractor_scan
 from repo_guard.reporter import render_scan_result
 
 
@@ -47,19 +48,7 @@ def _run_ioc_extractor(
     repo: str,
     vt_key: str | None = None,
 ) -> ModuleResult:
-    """Stub: placeholder for ioc_extractor module."""
-    # TODO: Implement in Phase 3
-    return ModuleResult(
-        module_name="ioc_extractor",
-        severity=Severity.INFO,
-        findings=[
-            Finding(
-                message="IOC extractor module not yet implemented. Skipping.",
-                severity=Severity.INFO,
-            )
-        ],
-        raw_data={},
-    )
+    return ioc_extractor_scan(client, owner, repo, vt_key=vt_key)
 
 
 # ---------------------------------------------------------------------------
