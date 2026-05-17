@@ -20,6 +20,8 @@ FAKE_REPO_INFO = {
     "private": False,
     "size": 100,
     "default_branch": "main",
+    "created_at": "2024-01-01T00:00:00Z",
+    "pushed_at": "2026-05-17T00:00:00Z",
 }
 
 
@@ -29,16 +31,16 @@ FAKE_REPO_INFO = {
 
 
 def _run(args: list[str]) -> "Result":
-    """Invoke the CLI with all GitHubClient methods mocked."""
     runner = CliRunner()
-    with patch("repo_guard.cli.GitHubClient.get_repo_info", return_value=FAKE_REPO_INFO):
-        with patch("repo_guard.cli.GitHubClient.get_tree", return_value=[]):
-            with patch("repo_guard.cli.GitHubClient.get_user_info", return_value={"created_at": "2024-01-01T00:00:00Z", "public_repos": 5, "followers": 10, "following": 3}):
-                with patch("repo_guard.cli.GitHubClient.get_repos_for_user", return_value=[]):
-                    with patch("repo_guard.cli.GitHubClient.get_contributors", return_value=[]):
-                        with patch("repo_guard.cli.GitHubClient.get_commits", return_value=[]):
-                            with patch("repo_guard.cli.GitHubClient.get_file_content", return_value=None):
-                                return runner.invoke(cli, args)
+    with patch("repo_guard.cli.GitHubClient.get_repo_info", return_value=FAKE_REPO_INFO), \
+         patch("repo_guard.cli.GitHubClient.get_tree", return_value=[]), \
+         patch("repo_guard.cli.GitHubClient.get_user_info", return_value={"created_at": "2024-01-01T00:00:00Z", "public_repos": 5, "followers": 10, "following": 3}), \
+         patch("repo_guard.cli.GitHubClient.get_repos_for_user", return_value=[]), \
+         patch("repo_guard.cli.GitHubClient.get_contributors", return_value=[]), \
+         patch("repo_guard.cli.GitHubClient.get_commits", return_value=[]), \
+         patch("repo_guard.cli.GitHubClient.get_file_content", return_value=None), \
+         patch("repo_guard.cli.GitHubClient.check_user_exists", return_value=True):
+        return runner.invoke(cli, args)
 
 
 # ---------------------------------------------------------------------------

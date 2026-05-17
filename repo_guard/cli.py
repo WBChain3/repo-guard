@@ -19,28 +19,16 @@ import click
 
 from repo_guard.github_client import GitHubClient, GitHubClientError, NotFoundError, PrivateRepoError, parse_github_url
 from repo_guard.models import Severity, Finding, ModuleResult, ScanResult, highest_severity
+from repo_guard.modules.trust_score import scan as trust_score_scan
 from repo_guard.reporter import render_scan_result
 
 
 # ---------------------------------------------------------------------------
-# Module stubs — replaced with real implementations in Phase 3
-# TODO: Replace each stub with `from repo_guard.modules.xxx import scan`
+# Module dispatchers — each receives a GitHubClient and returns ModuleResult
 # ---------------------------------------------------------------------------
 
 def _run_trust_score(client: GitHubClient, owner: str, repo: str) -> ModuleResult:
-    """Stub: placeholder for trust_score module."""
-    # TODO: Implement in Phase 3
-    return ModuleResult(
-        module_name="trust_score",
-        severity=Severity.INFO,
-        findings=[
-            Finding(
-                message="Trust score module not yet implemented. Skipping.",
-                severity=Severity.INFO,
-            )
-        ],
-        raw_data={},
-    )
+    return trust_score_scan(client, owner, repo)
 
 
 def _run_hook_scanner(client: GitHubClient, owner: str, repo: str) -> ModuleResult:
