@@ -1,0 +1,2 @@
+[console_scripts]
+repo-guard = repo_guard.cli:main

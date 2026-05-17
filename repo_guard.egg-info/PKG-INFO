@@ -1,0 +1,14 @@
+Metadata-Version: 2.4
+Name: repo-guard
+Version: 0.1.0
+Summary: CLI security scanner for GitHub repositories
+Requires-Python: >=3.10
+Description-Content-Type: text/markdown
+Requires-Dist: requests>=2.31.0
+Requires-Dist: rich>=13.0.0
+Requires-Dist: click>=8.1.0
+Provides-Extra: dev
+Requires-Dist: pytest>=7.0.0; extra == "dev"
+Requires-Dist: pytest-cov>=4.0.0; extra == "dev"
+Requires-Dist: responses>=0.24.0; extra == "dev"
+Requires-Dist: ruff>=0.1.0; extra == "dev"
