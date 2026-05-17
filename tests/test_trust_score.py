@@ -9,6 +9,7 @@ suspended contributors, force-push heuristics.
 from datetime import datetime, timezone
 from unittest.mock import Mock
 
+from repo_guard.github_client import GitHubClientError
 from repo_guard.models import Severity
 from repo_guard.modules.trust_score import scan, _days_ago, _score_to_severity
 
@@ -248,7 +249,7 @@ class TestTrustScoreEdgeCases:
     def test_api_failure_on_user_info_does_not_crash(self):
         """If get_user_info raises, the module should handle it gracefully."""
         client = Mock()
-        client.get_user_info.side_effect = Exception("API error")
+        client.get_user_info.side_effect = GitHubClientError("API error")
         client.get_repo_info.return_value = {}
         client.get_contributors.return_value = []
         client.get_commits.return_value = []

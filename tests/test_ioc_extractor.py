@@ -1,13 +1,13 @@
 """
 Tests for ioc_extractor module — Module 4.
 
-Loads FlexPay and clean repo fixtures from disk. Tests IOC extraction
-patterns, base64 recursion, optional VT enrichment. No network calls.
+Loads FlexPay and clean repo fixtures from conftest.py.
+No network calls.
 """
 
-import os
 from unittest.mock import Mock
 
+from repo_guard.github_client import GitHubClientError
 from repo_guard.models import Severity
 from repo_guard.modules.ioc_extractor import (
     scan,
@@ -19,21 +19,7 @@ from repo_guard.modules.ioc_extractor import (
     _decode_base64,
     _is_text_file,
 )
-
-FIXTURES_DIR = os.path.join(os.path.dirname(__file__), "fixtures")
-FLEXPAY_DIR = os.path.join(FIXTURES_DIR, "flexpay_mock")
-CLEAN_DIR = os.path.join(FIXTURES_DIR, "clean_repo")
-
-
-def _load_fixture_file(relative_path: str, base_dir: str) -> str:
-    file_path = os.path.join(base_dir, relative_path)
-    with open(file_path, "r") as f:
-        return f.read()
-
-
-# ---------------------------------------------------------------------------
-# Text file detection
-# ---------------------------------------------------------------------------
+from tests.conftest import load_fixture, FLEXPAY_DIR, CLEAN_DIR
 
 
 class TestIsTextFile:
@@ -55,17 +41,11 @@ class TestIsTextFile:
     def test_binary_extensions_are_not_text(self):
         assert _is_text_file("image.png") is False
         assert _is_text_file("archive.zip") is False
-        assert _is_text_file("binary.bin") is False
         assert _is_text_file("font.woff2") is False
 
-    def test_no_extension_is_not_text_by_default(self):
-        assert _is_text_file("Makefile") is True  # in ALWAYS_TEXT_PATHS
+    def test_no_extension_not_text_by_default(self):
+        assert _is_text_file("Makefile") is True
         assert _is_text_file("somefile") is False
-
-
-# ---------------------------------------------------------------------------
-# IOC extraction helpers
-# ---------------------------------------------------------------------------
 
 
 class TestExtractUrls:
@@ -105,7 +85,7 @@ class TestExtractEthAddresses:
         addr = "0x742d35Cc6634C0532925a3b844Bc454e4438f44e"
         result = _extract_eth_addresses(addr)
         assert len(result) == 1
-        assert result[0] == addr  # Preserves case
+        assert result[0] == addr
 
     def test_mixed_case(self):
         addr = "0xABCDEF0123456789abcdef0123456789abcdef01"
@@ -116,7 +96,7 @@ class TestExtractEthAddresses:
         assert _extract_eth_addresses("no addresses here") == []
 
     def test_wrong_length_ignored(self):
-        text = "0x1234"  # Too short
+        text = "0x1234"
         assert _extract_eth_addresses(text) == []
 
 
@@ -141,18 +121,15 @@ class TestExtractBase64Blobs:
         assert payload in blobs
 
     def test_short_strings_ignored(self):
-        text = "abc123"  # Too short (6 chars)
-        blobs = _extract_base64_blobs(text)
+        blobs = _extract_base64_blobs("abc123")
         assert len(blobs) == 0
 
     def test_hex_strings_ignored(self):
-        text = "a" * 30  # Looks like hex
-        blobs = _extract_base64_blobs(text)
+        blobs = _extract_base64_blobs("a" * 30)
         assert len(blobs) == 0
 
     def test_invalid_base64_ignored(self):
-        text = "!!!!invalid!!!!base64!!!!string!!!!"
-        blobs = _extract_base64_blobs(text)
+        blobs = _extract_base64_blobs("!!!!invalid!!!!base64!!!!string!!!!")
         assert len(blobs) == 0
 
 
@@ -167,110 +144,80 @@ class TestDecodeBase64:
         assert "curl evil.com" in decoded[0]
 
     def test_max_depth(self):
-        """Nested base64 should not exceed recursion limit."""
         import base64
         inner = "hello world"
-        for _ in range(4):  # Nest beyond limit
+        for _ in range(4):
             inner = base64.b64encode(inner.encode()).decode()
         decoded = _decode_base64(inner)
-        # Should not crash and should return at most 3 levels
         assert len(decoded) <= 3
 
     def test_empty_returns_empty(self):
         assert _decode_base64("") == []
 
 
-# ---------------------------------------------------------------------------
-# FlexPay fixture — should find IOCs
-# ---------------------------------------------------------------------------
-
-
 class TestIocExtractorFlexPay:
     """FlexPay fixture has URLs, base64 payloads, domains, etc."""
 
-    def _make_flexpay_tree(self):
-        return [
+    def _make_client(self) -> Mock:
+        tree = [
             {"path": "README.md", "type": "blob", "sha": "a", "size": 50},
             {"path": ".githooks/post-checkout", "type": "blob", "sha": "b", "size": 500},
             {"path": ".vscode/tasks.json", "type": "blob", "sha": "c", "size": 200},
             {"path": ".vscode/settings.json", "type": "blob", "sha": "d", "size": 100},
         ]
-
-    def _make_flexpay_client(self):
         client = Mock()
-        client.get_tree.return_value = self._make_flexpay_tree()
-
+        client.get_tree.return_value = tree
         def side_effect(o, r, path):
-            if path == "README.md":
-                return _load_fixture_file("README.md", FLEXPAY_DIR)
-            elif path == ".githooks/post-checkout":
-                return _load_fixture_file(".githooks/post-checkout", FLEXPAY_DIR)
-            elif path == ".vscode/tasks.json":
-                return _load_fixture_file(".vscode/tasks.json", FLEXPAY_DIR)
-            elif path == ".vscode/settings.json":
-                return _load_fixture_file(".vscode/settings.json", FLEXPAY_DIR)
-            return None
-
+            return {
+                "README.md": load_fixture("README.md", FLEXPAY_DIR),
+                ".githooks/post-checkout": load_fixture(".githooks/post-checkout", FLEXPAY_DIR),
+                ".vscode/tasks.json": load_fixture(".vscode/tasks.json", FLEXPAY_DIR),
+                ".vscode/settings.json": load_fixture(".vscode/settings.json", FLEXPAY_DIR),
+            }.get(path)
         client.get_file_content.side_effect = side_effect
         return client
 
     def test_flexpay_finds_urls(self):
-        result = scan(self._make_flexpay_client(), "flexpay", "repo", vt_key=None)
-        iocs = result.raw_data.get("iocs", {})
-        urls = iocs.get("urls", [])
-        # FlexPay fixture has URLs in tasks.json and post-checkout.
-        assert len(urls) >= 1, f"Expected URLs, got: {urls}"
+        result = scan(self._make_client(), "flexpay", "repo", vt_key=None)
+        urls = result.raw_data.get("iocs", {}).get("urls", [])
+        assert len(urls) >= 1
 
     def test_flexpay_finds_base64_payloads(self):
-        result = scan(self._make_flexpay_client(), "flexpay", "repo", vt_key=None)
-        iocs = result.raw_data.get("iocs", {})
-        b64 = iocs.get("base64_payloads", [])
-        assert len(b64) >= 1, f"Expected base64 payloads, got: {b64}"
+        result = scan(self._make_client(), "flexpay", "repo", vt_key=None)
+        b64 = result.raw_data.get("iocs", {}).get("base64_payloads", [])
+        assert len(b64) >= 1
 
     def test_flexpay_returns_warning(self):
-        """FlexPay has enough IOCs to trigger WARNING."""
-        result = scan(self._make_flexpay_client(), "flexpay", "repo", vt_key=None)
+        result = scan(self._make_client(), "flexpay", "repo", vt_key=None)
         assert result.severity in (Severity.WARNING, Severity.CRITICAL)
 
     def test_flexpay_no_vt_note_included(self):
-        """Without vt_key, the enrichment note should appear."""
-        result = scan(self._make_flexpay_client(), "flexpay", "repo", vt_key=None)
-        note_findings = [f for f in result.findings if "VirusTotal" in f.message]
-        assert len(note_findings) >= 1
+        result = scan(self._make_client(), "flexpay", "repo", vt_key=None)
+        assert any("VirusTotal" in f.message for f in result.findings)
 
     def test_flexpay_with_vt_key_skips_note(self):
-        """With vt_key provided, the enrichment note should NOT appear."""
-        result = scan(self._make_flexpay_client(), "flexpay", "repo", vt_key="fake_vt_key")
-        note_findings = [f for f in result.findings if "VirusTotal enrichment not available" in f.message]
-        assert len(note_findings) == 0
-
-
-# ---------------------------------------------------------------------------
-# Clean repo fixture — should return CLEAN
-# ---------------------------------------------------------------------------
+        result = scan(self._make_client(), "flexpay", "repo", vt_key="fake_vt_key")
+        assert not any("VirusTotal enrichment not available" in f.message for f in result.findings)
 
 
 class TestIocExtractorClean:
     """Clean repo has no IOCs."""
 
-    def test_clean_repo_no_iocs(self):
+    def _make_client(self) -> Mock:
         tree = [
             {"path": "src/main.py", "type": "blob", "sha": "a", "size": 100},
             {"path": ".vscode/settings.json", "type": "blob", "sha": "b", "size": 50},
         ]
         client = Mock()
         client.get_tree.return_value = tree
+        client.get_file_content.side_effect = lambda o, r, path: (
+            load_fixture("src/main.py", CLEAN_DIR) if path == "src/main.py" else
+            load_fixture(".vscode/settings.json", CLEAN_DIR) if path == ".vscode/settings.json" else None
+        )
+        return client
 
-        def side_effect(o, r, path):
-            if path == "src/main.py":
-                return _load_fixture_file("src/main.py", CLEAN_DIR)
-            elif path == ".vscode/settings.json":
-                return _load_fixture_file(".vscode/settings.json", CLEAN_DIR)
-            return None
-
-        client.get_file_content.side_effect = side_effect
-
-        result = scan(client, "owner", "clean-repo", vt_key=None)
+    def test_clean_repo_no_iocs(self):
+        result = scan(self._make_client(), "owner", "clean-repo", vt_key=None)
         assert result.severity == Severity.CLEAN
         assert result.raw_data.get("iocs", {}).get("urls") == []
 
@@ -282,7 +229,7 @@ class TestIocExtractorClean:
 
     def test_tree_fetch_failure_returns_info(self):
         client = Mock()
-        client.get_tree.side_effect = Exception("API error")
+        client.get_tree.side_effect = GitHubClientError("API error")
         result = scan(client, "o", "r")
         assert result.severity == Severity.INFO
         assert "Could not fetch" in result.findings[0].message

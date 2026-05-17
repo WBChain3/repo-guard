@@ -154,7 +154,7 @@ def scan(
     is_empty = repo_info.get("size") is None or repo_info.get("size", 0) == 0
 
     # ------------------------------------------------------------------
-    # 3. Run modules in order
+    # 5. Run modules in order
     # ------------------------------------------------------------------
     module_results: list[ModuleResult] = []
 
@@ -172,7 +172,7 @@ def scan(
         module_results.append(_run_ioc_extractor(client, owner, repo_name, vt_key))
 
     # ------------------------------------------------------------------
-    # 4. Aggregate results
+    # 6. Aggregate results
     # ------------------------------------------------------------------
     overall_severity = highest_severity([m.severity for m in module_results])
 
@@ -186,12 +186,12 @@ def scan(
     )
 
     # ------------------------------------------------------------------
-    # 5. Render output
+    # 7. Render output
     # ------------------------------------------------------------------
     render_scan_result(scan_result, json_output=json_output)
 
     # ------------------------------------------------------------------
-    # 6. Exit with status code reflecting severity
+    # 8. Exit with status code reflecting severity
     # ------------------------------------------------------------------
     if overall_severity >= Severity.WARNING:
         raise SystemExit(1)

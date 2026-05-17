@@ -32,8 +32,9 @@ import base64
 import re
 from typing import Any
 
-from repo_guard.github_client import GitHubClient, NotFoundError
+from repo_guard.github_client import GitHubClient, GitHubClientError, NotFoundError
 from repo_guard.models import Severity, Finding, ModuleResult
+from repo_guard.modules.ioc_extractor import _extract_base64_blobs
 
 
 # ---------------------------------------------------------------------------
@@ -46,7 +47,6 @@ EXECUTION_PATTERNS: list[tuple[re.Pattern, str]] = [
     (re.compile(r"(curl|wget)\s+.*\s*\|\s*(sh|bash|cmd|zsh)"), "Remote payload piped to shell"),
     (re.compile(r">\s*/dev/null\s+2>&1"), "Output suppression (>/dev/null 2>&1)"),
     (re.compile(r"\bnohup\b"), "nohup persistence indicator"),
-    (re.compile(r"[A-Za-z0-9+/]{40,}={0,2}"), "Base64-encoded blob detected"),
     (re.compile(r"exec\(.*base64\.b64decode"), "Base64 decode + exec chain"),
     (re.compile(r"urllib\.request|requests\.get.*exec"), "Download + execute pattern"),
 ]
@@ -95,8 +95,9 @@ def _check_network_commands(content: str, file_path: str) -> list[Finding]:
         # Skip comment lines.
         if stripped.startswith("#"):
             continue
-        # Look for curl/wget with a URL (skip flags between tool name and URL).
-        url_match = re.search(r"(curl|wget)\s+(?:-\S+\s+)*(\S+)", stripped)
+        # Look for curl/wget with a URL. Use non-greedy .*? to skip
+        # any flags and non-flag arguments (e.g. curl -s -o file https://evil.com).
+        url_match = re.search(r"(curl|wget)\s+.*?(https?://\S+)", stripped)
         if url_match and _is_url(url_match.group(2)):
             findings.append(Finding(
                 message=f"Network command with external URL: {url_match.group(1)} to {url_match.group(2)}",
@@ -156,19 +157,19 @@ def _check_base64_payloads(content: str, file_path: str) -> list[Finding]:
     """
     Decode and inspect base64 blobs in the hook content.
 
-    Looks for base64 strings that decode to shell commands or
-    additional execution chains.
+    Uses ioc_extractor's _extract_base64_blobs for detection and validation,
+    then checks decoded content for execution chains.
     """
     findings: list[Finding] = []
-    # Find base64 strings of length > 20.
-    b64_pattern = re.compile(r"[A-Za-z0-9+/]{20,}={0,2}")
-    for match in b64_pattern.finditer(content):
-        b64_str = match.group()
+    blobs = _extract_base64_blobs(content)
+
+    for b64_str in blobs:
         try:
-            decoded = base64.b64decode(b64_str).decode("utf-8", errors="replace")
-        except (ValueError, Exception):
+            decoded_bytes = base64.b64decode(b64_str, validate=True)
+            decoded = decoded_bytes.decode("utf-8", errors="replace")
+        except (ValueError, UnicodeDecodeError):
             continue
-        # Check if decoded content contains shell commands or exec.
+
         if any(kw in decoded.lower() for kw in ["import ", "exec(", "os.system", "subprocess", "pwned", "payload"]):
             findings.append(Finding(
                 message="Base64 blob decodes to executable payload",
@@ -202,7 +203,7 @@ def scan(client: GitHubClient, owner: str, repo: str) -> ModuleResult:
     try:
         tree = client.get_tree(owner, repo)
         raw_data["tree_entries_count"] = len(tree)
-    except Exception as exc:
+    except GitHubClientError as exc:  # GitHubClientError only — never bare Exception
         return ModuleResult(
             module_name="hook_scanner",
             severity=Severity.INFO,
@@ -216,11 +217,11 @@ def scan(client: GitHubClient, owner: str, repo: str) -> ModuleResult:
             raw_data={"error": str(exc)},
         )
 
-    # Filter for files under .githooks/.
+    # Filter for files under .githooks/ — match anywhere in path for nested repos (e.g. packages/backend/.githooks/).
     hook_files = [
         entry["path"] for entry in tree
         if entry.get("type") == "blob"
-        and entry["path"].startswith(".githooks/")
+        and "/.githooks/" in f"/{entry['path']}"
     ]
     raw_data["hook_files"] = hook_files
 
@@ -246,7 +247,7 @@ def scan(client: GitHubClient, owner: str, repo: str) -> ModuleResult:
             content = client.get_file_content(owner, repo, hook_path)
         except NotFoundError:
             continue
-        except Exception as exc:
+        except GitHubClientError as exc:  # GitHubClientError only — never bare Exception
             findings.append(Finding(
                 message=f"Could not fetch hook file {hook_path}: {exc}",
                 severity=Severity.INFO,

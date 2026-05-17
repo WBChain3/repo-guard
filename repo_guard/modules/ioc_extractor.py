@@ -26,7 +26,7 @@ import json
 import re
 from typing import Any
 
-from repo_guard.github_client import GitHubClient, NotFoundError
+from repo_guard.github_client import GitHubClient, GitHubClientError, NotFoundError
 from repo_guard.models import Severity, Finding, ModuleResult
 
 
@@ -94,9 +94,10 @@ def _is_text_file(path: str) -> bool:
 
     Checks both the file extension and known text-only path prefixes.
     """
-    # Check known text path prefixes.
+    # Check known text path prefixes — match anywhere in path for nested dirs (e.g. packages/backend/.githooks/).
+    normalized = f"/{path}"
     for prefix in ALWAYS_TEXT_PATHS:
-        if path.startswith(prefix) or path == prefix:
+        if f"/{prefix}/" in normalized or normalized == f"/{prefix}":
             return True
     # Check file extension.
     ext = "." + path.rsplit(".", 1)[-1].lower() if "." in path else ""
@@ -281,7 +282,7 @@ def scan(
     try:
         tree = client.get_tree(owner, repo)
         raw_data["tree_entries_count"] = len(tree)
-    except Exception as exc:
+    except GitHubClientError as exc:  # GitHubClientError only — never bare Exception
         return ModuleResult(
             module_name="ioc_extractor",
             severity=Severity.INFO,
@@ -323,7 +324,7 @@ def scan(
     for file_path in sorted(text_files):
         try:
             content = client.get_file_content(owner, repo, file_path)
-        except (NotFoundError, Exception):
+        except (NotFoundError, GitHubClientError):  # GitHubClientError only — never bare Exception
             continue
 
         if content is None:

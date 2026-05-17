@@ -10,7 +10,6 @@ These tests verify that:
 """
 
 import json
-import sys
 from datetime import datetime, timezone
 
 import pytest
@@ -167,45 +166,23 @@ class TestTerminalReporter:
 class TestJSONReporter:
     """Verify JSONReporter produces valid, structured JSON output."""
 
-    def test_produces_valid_json(self):
+    def test_produces_valid_json(self, capsys):
         result = _make_result()
-        reporter = JSONReporter()
-
-        # Capture stdout.
-        from io import StringIO
-        captured = StringIO()
-        old_stdout = sys.stdout
-        sys.stdout = captured
-        try:
-            reporter.render(result)
-        finally:
-            sys.stdout = old_stdout
-
-        output = captured.getvalue()
-        parsed = json.loads(output)
+        JSONReporter().render(result)
+        captured = capsys.readouterr()
+        parsed = json.loads(captured.out)
         assert parsed["repo_url"] == "https://github.com/owner/repo"
         assert parsed["overall_severity"] == "CLEAN"
 
-    def test_json_has_all_required_keys(self):
-        """The JSON output must contain all top-level fields from ScanResult."""
+    def test_json_has_all_required_keys(self, capsys):
         result = _make_result()
-        reporter = JSONReporter()
-
-        from io import StringIO
-        captured = StringIO()
-        old_stdout = sys.stdout
-        sys.stdout = captured
-        try:
-            reporter.render(result)
-        finally:
-            sys.stdout = old_stdout
-
-        parsed = json.loads(captured.getvalue())
+        JSONReporter().render(result)
+        captured = capsys.readouterr()
+        parsed = json.loads(captured.out)
         required_keys = {"repo_url", "repo_owner", "repo_name", "scanned_at", "overall_severity", "modules"}
         assert required_keys.issubset(parsed.keys())
 
-    def test_json_contains_finding_details(self):
-        """Findings with details should be present in the JSON output."""
+    def test_json_contains_finding_details(self, capsys):
         result = _make_result(
             overall_severity=Severity.CRITICAL,
             module_severity=Severity.CRITICAL,
@@ -217,39 +194,19 @@ class TestJSONReporter:
                 )
             ],
         )
-        reporter = JSONReporter()
-
-        from io import StringIO
-        captured = StringIO()
-        old_stdout = sys.stdout
-        sys.stdout = captured
-        try:
-            reporter.render(result)
-        finally:
-            sys.stdout = old_stdout
-
-        parsed = json.loads(captured.getvalue())
+        JSONReporter().render(result)
+        captured = capsys.readouterr()
+        parsed = json.loads(captured.out)
         finding = parsed["modules"][0]["findings"][0]
         assert finding["message"] == "bad thing"
         assert finding["severity"] == "CRITICAL"
         assert finding["details"]["path"] == "file.sh"
 
-    def test_json_pretty_printed(self):
-        """Output should be indented (pretty-printed) for readability."""
+    def test_json_pretty_printed(self, capsys):
         result = _make_result()
-        reporter = JSONReporter()
-
-        from io import StringIO
-        captured = StringIO()
-        old_stdout = sys.stdout
-        sys.stdout = captured
-        try:
-            reporter.render(result)
-        finally:
-            sys.stdout = old_stdout
-
-        output = captured.getvalue()
-        assert "  " in output  # Indentation indicates pretty-printing
+        JSONReporter().render(result)
+        captured = capsys.readouterr()
+        assert "  " in captured.out  # Indentation indicates pretty-printing
 
 
 # ---------------------------------------------------------------------------
@@ -265,18 +222,9 @@ class TestRenderScanResult:
         result = _make_result()
         render_scan_result(result, json_output=False)
 
-    def test_json_when_flag_set(self):
-        """render_scan_result with json_output=True should produce JSON."""
+    def test_json_when_flag_set(self, capsys):
         result = _make_result()
-
-        from io import StringIO
-        captured = StringIO()
-        old_stdout = sys.stdout
-        sys.stdout = captured
-        try:
-            render_scan_result(result, json_output=True)
-        finally:
-            sys.stdout = old_stdout
-
-        parsed = json.loads(captured.getvalue())
+        render_scan_result(result, json_output=True)
+        captured = capsys.readouterr()
+        parsed = json.loads(captured.out)
         assert parsed["overall_severity"] == "CLEAN"

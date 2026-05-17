@@ -21,7 +21,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
-from repo_guard.github_client import GitHubClient
+from repo_guard.github_client import GitHubClient, GitHubClientError
 from repo_guard.models import Severity, Finding, ModuleResult
 
 
@@ -75,7 +75,7 @@ def scan(client: GitHubClient, owner: str, repo: str) -> ModuleResult:
     try:
         user_info = client.get_user_info(owner)
         raw_data["user_info"] = user_info
-    except Exception:
+    except GitHubClientError:
         user_info = {}
 
     account_age_days = _days_ago(user_info.get("created_at"))
@@ -122,10 +122,10 @@ def scan(client: GitHubClient, owner: str, repo: str) -> ModuleResult:
     try:
         contributors = client.get_contributors(owner, repo)
         raw_data["contributors"] = contributors
-    except Exception:
+    except GitHubClientError:
         contributors = []
 
-    for contributor in contributors:
+    for contributor in contributors[:10]:  # Cap at 10 — large repos can have hundreds of contributors, each requiring an API call
         login = contributor.get("login", "")
         if login:
             exists = client.check_user_exists(login)
@@ -137,13 +137,20 @@ def scan(client: GitHubClient, owner: str, repo: str) -> ModuleResult:
                     details={"contributor": login, "penalty": -25},
                 ))
 
+    if len(contributors) > 10:
+        findings.append(Finding(
+            message=f"Contributor check limited to first 10 of {len(contributors)} total contributors. Remaining {len(contributors) - 10} were not verified to avoid excessive API calls.",
+            severity=Severity.INFO,
+            details={"total_contributors": len(contributors), "checked": 10},
+        ))
+
     # ------------------------------------------------------------------
     # 3. Repository-level signals
     # ------------------------------------------------------------------
     try:
         repo_info = client.get_repo_info(owner, repo)
         raw_data["repo_info"] = repo_info
-    except Exception:
+    except GitHubClientError:
         repo_info = {}
 
     repo_age_days = _days_ago(repo_info.get("created_at"))
@@ -163,7 +170,7 @@ def scan(client: GitHubClient, owner: str, repo: str) -> ModuleResult:
     try:
         commits = client.get_commits(owner, repo)
         raw_data["commits"] = commits
-    except Exception:
+    except GitHubClientError:  # GitHubClientError only — never bare Exception
         commits = []
 
     # Single commit → -15

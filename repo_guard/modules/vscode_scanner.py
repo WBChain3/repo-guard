@@ -26,7 +26,7 @@ from __future__ import annotations
 import json
 from typing import Any
 
-from repo_guard.github_client import GitHubClient, NotFoundError
+from repo_guard.github_client import GitHubClient, GitHubClientError, NotFoundError
 from repo_guard.models import Severity, Finding, ModuleResult
 
 
@@ -37,13 +37,15 @@ VSCODE_CONTEXT_NOTE = (
 )
 
 
-def _check_tasks_json(tasks_content: str) -> list[Finding]:
+def _check_tasks_json(tasks_content: str) -> tuple[list[Finding], bool]:
     """
     Parse tasks.json and check for auto-execution flags.
 
-    Returns a list of Findings.
+    Returns (findings, has_folder_open) where has_folder_open indicates
+    whether any task had runOn: folderOpen.
     """
     findings: list[Finding] = []
+    has_folder_open = False
 
     try:
         tasks_data = json.loads(tasks_content)
@@ -53,11 +55,11 @@ def _check_tasks_json(tasks_content: str) -> list[Finding]:
             severity=Severity.INFO,
             details={"error": str(exc)},
         ))
-        return findings
+        return findings, False
 
     tasks = tasks_data.get("tasks", [])
     if not tasks:
-        return findings
+        return findings, False
 
     for task in tasks:
         run_on = task.get("runOn", "")
@@ -95,17 +97,20 @@ def _check_tasks_json(tasks_content: str) -> list[Finding]:
                 severity=severity,
                 details=details,
             ))
+            has_folder_open = True
 
-    return findings
+    return findings, has_folder_open
 
 
-def _check_settings_json(settings_content: str) -> list[Finding]:
+def _check_settings_json(settings_content: str) -> tuple[list[Finding], bool]:
     """
     Parse settings.json and check for auto-execution flags.
 
-    Returns a list of Findings.
+    Returns (findings, has_allow_auto) where has_allow_auto indicates
+    whether task.allowAutomaticTasks was enabled.
     """
     findings: list[Finding] = []
+    has_allow_auto = False
 
     try:
         settings_data = json.loads(settings_content)
@@ -115,7 +120,7 @@ def _check_settings_json(settings_content: str) -> list[Finding]:
             severity=Severity.INFO,
             details={"error": str(exc)},
         ))
-        return findings
+        return findings, False
 
     allow_auto = settings_data.get("task.allowAutomaticTasks", "")
     if allow_auto == "on":
@@ -124,8 +129,9 @@ def _check_settings_json(settings_content: str) -> list[Finding]:
             severity=Severity.WARNING,
             details={"task.allowAutomaticTasks": allow_auto},
         ))
+        has_allow_auto = True
 
-    return findings
+    return findings, has_allow_auto
 
 
 def scan(client: GitHubClient, owner: str, repo: str) -> ModuleResult:
@@ -138,6 +144,8 @@ def scan(client: GitHubClient, owner: str, repo: str) -> ModuleResult:
     raw_data: dict[str, Any] = {}
     has_tasks = False
     has_settings = False
+    has_folder_open = False
+    has_allow_auto = False
 
     # ------------------------------------------------------------------
     # 1. Fetch .vscode/tasks.json
@@ -147,10 +155,11 @@ def scan(client: GitHubClient, owner: str, repo: str) -> ModuleResult:
         if tasks_content is not None:
             raw_data[".vscode/tasks.json"] = tasks_content
             has_tasks = True
-            findings.extend(_check_tasks_json(tasks_content))
+            tasks_findings, has_folder_open = _check_tasks_json(tasks_content)
+            findings.extend(tasks_findings)
     except NotFoundError:
-        pass  # No tasks.json — not a flag.
-    except Exception as exc:
+        pass
+    except GitHubClientError as exc:  # GitHubClientError only — never bare Exception
         findings.append(Finding(
             message="Could not fetch .vscode/tasks.json.",
             severity=Severity.INFO,
@@ -165,20 +174,17 @@ def scan(client: GitHubClient, owner: str, repo: str) -> ModuleResult:
         if settings_content is not None:
             raw_data[".vscode/settings.json"] = settings_content
             has_settings = True
-            settings_findings = _check_settings_json(settings_content)
+            settings_findings, has_allow_auto = _check_settings_json(settings_content)
             findings.extend(settings_findings)
-
-            # If both allowAutomaticTasks and folderOpen are present → CRITICAL.
-            if any("task.allowAutomaticTasks is enabled" in f.message for f in settings_findings):
-                if any("runOn: folderOpen" in f.message for f in findings):
-                    findings.append(Finding(
-                        message="Both task.allowAutomaticTasks and runOn: folderOpen present — automatic task execution is fully enabled.",
-                        severity=Severity.CRITICAL,
-                        details={"note": VSCODE_CONTEXT_NOTE},
-                    ))
+            if has_folder_open and has_allow_auto:
+                findings.append(Finding(
+                    message="Both task.allowAutomaticTasks and runOn: folderOpen present — automatic task execution is fully enabled.",
+                    severity=Severity.CRITICAL,
+                    details={"note": VSCODE_CONTEXT_NOTE},
+                ))
     except NotFoundError:
         pass  # No settings.json — not a flag.
-    except Exception as exc:
+    except GitHubClientError as exc:  # GitHubClientError only — never bare Exception
         findings.append(Finding(
             message="Could not fetch .vscode/settings.json.",
             severity=Severity.INFO,
