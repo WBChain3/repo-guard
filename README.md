@@ -105,29 +105,8 @@ repo-guard scan https://github.com/owner/repo --json | jq '.modules[].severity'
 ```
 
 ## Example Output
-╭──────────────────────────────────────────╮
-│ repo-guard scan results                   │
-│ https://github.com/suspicious/repo        │
-│ Scanned at: 2026-05-17T12:00:00+00:00    │
-╰──────────────────────────────────────────╯
-╭─ Module: Trust Score  [INFO] ──────────────────╮
-│  • Account age is 14 days (< 30).              │
-│  • Repository age is 5 days (< 30).            │
-╰────────────────────────────────────────────────╯
-╭─ Module: Hook Scanner  [CRITICAL] ─────────────╮
-│  • Network command with external URL           │
-│    file: .githooks/post-checkout               │
-│    url: https://evil.com/init.sh               │
-│  • Output suppression (>/dev/null 2>&1)        │
-│  • Base64 blob decodes to executable payload   │
-╰────────────────────────────────────────────────╯
-╭─ Module: VS Code Scanner  [CRITICAL] ──────────╮
-│  • Task 'Init environment' has runOn: folderOpen│
-│  • task.allowAutomaticTasks is enabled ("on"). │
-│  • Both present — fully automatic execution    │
-╰────────────────────────────────────────────────╯
-╭─ OVERALL RISK: CRITICAL ───────────────────────╮
-╰─────────────────────────────────────────────────╯
+
+![repo-guard scan example](docs/readme.example.jpeg)
 
 ## Architecture
 
@@ -167,26 +146,28 @@ pytest --cov=repo_guard
 All tests use mocked HTTP and on-disk fixtures. No live API calls.
 
 ## Project Structure
+```
 repo_guard/
 ├── repo_guard/
-│   ├── cli.py                  # Entry point, click orchestration
-│   ├── github_client.py        # GitHub API client
-│   ├── models.py               # Dataclasses: Severity, Finding, ModuleResult, ScanResult
-│   ├── reporter.py             # Terminal + JSON output
+│   ├── cli.py
+│   ├── github_client.py
+│   ├── models.py
+│   ├── reporter.py
 │   └── modules/
-│       ├── trust_score.py      # Module 1: Account & repo metadata
-│       ├── hook_scanner.py     # Module 2: .githooks payload detection
-│       ├── vscode_scanner.py   # Module 3: .vscode auto-execution detection
-│       └── ioc_extractor.py    # Module 4: IOC extraction & VT enrichment
+│       ├── trust_score.py
+│       ├── hook_scanner.py
+│       ├── vscode_scanner.py
+│       └── ioc_extractor.py
 ├── tests/
 │   ├── fixtures/
-│   │   ├── flexpay_mock/       # Attack chain replica (canary test)
-│   │   └── clean_repo/         # Benign repo (false-negative guard)
+│   │   ├── flexpay_mock/
+│   │   └── clean_repo/
 │   ├── conftest.py
 │   └── test_*.py
 ├── ARCHITECT_DECISIONS.md
 ├── IOC_FEED.md
 └── pyproject.toml
+```
 
 ## Reported IOCs
 
