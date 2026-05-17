@@ -107,6 +107,8 @@ implementation (ioc_extractor) now owns the logic. Single source of truth.
 **Tradeoff**: hook_scanner has a dependency on ioc_extractor. Acceptable
 given they're sibling modules in the same package.
 
+**Future**: If the project grows, extract to `utils/base64_utils.py` as a shared utility.
+
 ---
 
 ### AD-008 — Boolean flags replace message string sniffing
@@ -220,11 +222,6 @@ methodology but requires significant API quota and graph traversal logic.
 
 **Future**: High value for the security research audience. Natural extension
 once the core scanner is stable.
-
----
-
-### AD-016 — hook_scanner imports from ioc_extractor
-Decision: hook_scanner.py imports _extract_base64_blobs from ioc_extractor rather than duplicating logic. Acknowledged coupling between sibling modules. Acceptable for MVP. If the project grows, extract to utils/base64_utils.py as a shared utility.
 
 ---
 
