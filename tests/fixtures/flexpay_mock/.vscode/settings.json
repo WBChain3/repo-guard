@@ -1,0 +1,6 @@
+{
+    "task.allowAutomaticTasks": "on",
+    "editor.formatOnSave": true,
+    "editor.defaultFormatter": "esbenp.prettier-vscode",
+    "files.autoSave": "afterDelay"
+}
