@@ -17,7 +17,7 @@ from typing import Any
 
 import click
 
-from repo_guard.github_client import GitHubClient, NotFoundError, PrivateRepoError, parse_github_url
+from repo_guard.github_client import GitHubClient, GitHubClientError, NotFoundError, PrivateRepoError, parse_github_url
 from repo_guard.models import Severity, Finding, ModuleResult, ScanResult, highest_severity
 from repo_guard.reporter import render_scan_result
 
@@ -150,7 +150,24 @@ def scan(
     # ------------------------------------------------------------------
     client = GitHubClient(token=token)
 
-    # Quick reachability check — does the repo exist and is it accessible?
+    # ------------------------------------------------------------------
+    # 3. Warn about unimplemented flags
+    # ------------------------------------------------------------------
+    if preview:
+        click.echo(
+            "INFO: --preview mode is not yet implemented. Suspicious file "
+            "contents will not be displayed in this version.",
+            err=True,
+        )
+    if recruiter:
+        click.echo(
+            f"INFO: --recruiter context is not yet implemented. "
+            f"Recruiter info '{recruiter}' will not be used in this version.",
+            err=True,
+        )
+
+    # ------------------------------------------------------------------
+    # 4. Quick reachability check — does the repo exist and is it accessible?
     try:
         repo_info = client.get_repo_info(owner, repo_name)
     except PrivateRepoError:
@@ -165,6 +182,13 @@ def scan(
         click.secho(
             f"ERROR: Repository not found: {github_url}. Check the URL and "
             f"ensure it exists (or use --token for private repos).",
+            fg="red",
+            err=True,
+        )
+        raise SystemExit(1)
+    except GitHubClientError as exc:
+        click.secho(
+            f"ERROR: GitHub API request failed: {exc}",
             fg="red",
             err=True,
         )

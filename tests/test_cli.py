@@ -1,19 +1,44 @@
 """
 Tests for cli.py — argument parsing, flag handling, error cases.
 
-All tests use Click's CliRunner to invoke the CLI without spawning a
-subprocess. No live GitHub API calls are made — any HTTP interaction
-beyond argument parsing would need mocking, but for this Phase 2 test
-we are validating only argument parsing and error handling behavior.
-
-The module stubs in cli.py return immediately without any network calls,
-so these tests stay fast and isolated.
+All tests use Click's CliRunner with GitHubClient methods mocked via
+unittest.mock.patch. No live GitHub API calls are made.
 """
+
+from unittest.mock import patch
 
 import pytest
 from click.testing import CliRunner
 
 from repo_guard.cli import cli
+
+# A minimal fake response matching what get_repo_info returns.
+FAKE_REPO_INFO = {
+    "name": "repo",
+    "full_name": "o/repo",
+    "owner": {"login": "o"},
+    "private": False,
+    "size": 100,
+    "default_branch": "main",
+}
+
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+
+def _run(args: list[str]) -> "Result":
+    """Invoke the CLI with all GitHubClient methods mocked."""
+    runner = CliRunner()
+    with patch("repo_guard.cli.GitHubClient.get_repo_info", return_value=FAKE_REPO_INFO):
+        with patch("repo_guard.cli.GitHubClient.get_tree", return_value=[]):
+            with patch("repo_guard.cli.GitHubClient.get_user_info", return_value={"created_at": "2024-01-01T00:00:00Z", "public_repos": 5, "followers": 10, "following": 3}):
+                with patch("repo_guard.cli.GitHubClient.get_repos_for_user", return_value=[]):
+                    with patch("repo_guard.cli.GitHubClient.get_contributors", return_value=[]):
+                        with patch("repo_guard.cli.GitHubClient.get_commits", return_value=[]):
+                            with patch("repo_guard.cli.GitHubClient.get_file_content", return_value=None):
+                                return runner.invoke(cli, args)
 
 
 # ---------------------------------------------------------------------------
@@ -25,19 +50,13 @@ class TestCliBasic:
     """Verify the CLI entry point works at minimum."""
 
     def test_help_text_exists(self):
-        """Running with --help should produce help text and exit 0."""
-        runner = CliRunner()
-        result = runner.invoke(cli, ["--help"])
+        result = _run(["--help"])
         assert result.exit_code == 0
         assert "repo-guard" in result.output
         assert "scan" in result.output
 
     def test_no_command_shows_help(self):
-        """Running repo-guard with no subcommand should show help."""
-        runner = CliRunner()
-        result = runner.invoke(cli, [])
-        # Click exits with code 2 when a required subcommand is missing,
-        # but still prints the help text.
+        result = _run([])
         assert result.exit_code == 2
         assert "Usage:" in result.output
 
@@ -48,12 +67,10 @@ class TestCliBasic:
 
 
 class TestCliScanArgs:
-    """Verify the scan subcommand argument parsing."""
+    """Verify the scan subcommand argument parsing (no network calls)."""
 
     def test_scan_help(self):
-        """`repo-guard scan --help` should show flag descriptions."""
-        runner = CliRunner()
-        result = runner.invoke(cli, ["scan", "--help"])
+        result = _run(["scan", "--help"])
         assert result.exit_code == 0
         assert "GITHUB_URL" in result.output
         assert "--token" in result.output
@@ -63,31 +80,21 @@ class TestCliScanArgs:
         assert "--recruiter" in result.output
 
     def test_scan_with_valid_url(self):
-        """A well-formed GitHub URL should be accepted."""
-        runner = CliRunner()
-        result = runner.invoke(cli, ["scan", "https://github.com/owner/repo"])
-        # The CLI will attempt to reach GitHub API, but our stubs should handle
-        # the error gracefully.
+        result = _run(["scan", "https://github.com/owner/repo"])
         assert result.exit_code in (0, 1)
 
     def test_scan_rejects_invalid_url(self):
-        """An invalid URL should produce a clear error."""
-        runner = CliRunner()
-        result = runner.invoke(cli, ["scan", "not-a-url"])
+        result = _run(["scan", "not-a-url"])
         assert result.exit_code != 0
         assert "Invalid GitHub URL" in result.output
 
     def test_scan_rejects_non_github_url(self):
-        """A non-GitHub URL should be rejected."""
-        runner = CliRunner()
-        result = runner.invoke(cli, ["scan", "https://gitlab.com/owner/repo"])
+        result = _run(["scan", "https://gitlab.com/owner/repo"])
         assert result.exit_code != 0
         assert "Invalid GitHub URL" in result.output
 
     def test_scan_rejects_missing_url(self):
-        """scan subcommand requires a URL argument."""
-        runner = CliRunner()
-        result = runner.invoke(cli, ["scan"])
+        result = _run(["scan"])
         assert result.exit_code != 0
         assert "argument" in result.output.lower()
 
@@ -98,37 +105,30 @@ class TestCliScanArgs:
 
 
 class TestCliScanFlags:
-    """Verify all flag combinations are accepted."""
+    """Verify all flag combinations are accepted (no network calls)."""
 
     def test_scan_with_token(self):
-        runner = CliRunner()
-        result = runner.invoke(cli, ["scan", "https://github.com/o/r", "--token", "ghp_fake"])
+        result = _run(["scan", "https://github.com/o/r", "--token", "ghp_fake"])
         assert result.exit_code in (0, 1)
 
     def test_scan_with_vt_key(self):
-        runner = CliRunner()
-        result = runner.invoke(cli, ["scan", "https://github.com/o/r", "--vt-key", "vt_fake"])
+        result = _run(["scan", "https://github.com/o/r", "--vt-key", "vt_fake"])
         assert result.exit_code in (0, 1)
 
     def test_scan_with_json(self):
-        runner = CliRunner()
-        result = runner.invoke(cli, ["scan", "https://github.com/o/r", "--json"])
+        result = _run(["scan", "https://github.com/o/r", "--json"])
         assert result.exit_code in (0, 1)
 
     def test_scan_with_preview(self):
-        runner = CliRunner()
-        result = runner.invoke(cli, ["scan", "https://github.com/o/r", "--preview"])
+        result = _run(["scan", "https://github.com/o/r", "--preview"])
         assert result.exit_code in (0, 1)
 
     def test_scan_with_recruiter(self):
-        runner = CliRunner()
-        result = runner.invoke(cli, ["scan", "https://github.com/o/r", "--recruiter", "https://linkedin.com/in/fake"])
+        result = _run(["scan", "https://github.com/o/r", "--recruiter", "https://linkedin.com/in/fake"])
         assert result.exit_code in (0, 1)
 
     def test_scan_all_flags_together(self):
-        """All flags should be accepted simultaneously."""
-        runner = CliRunner()
-        result = runner.invoke(cli, [
+        result = _run([
             "scan",
             "https://github.com/o/r",
             "--token", "ghp_fake",
@@ -139,11 +139,20 @@ class TestCliScanFlags:
         ])
         assert result.exit_code in (0, 1)
 
-    def test_scan_with_https_required(self):
-        """http:// URLs should also be accepted (normalized by GitHub)."""
-        runner = CliRunner()
-        result = runner.invoke(cli, ["scan", "http://github.com/owner/repo"])
+    def test_scan_with_https_rejected_by_url_parser(self):
+        """http:// is parsed the same as https:// by our URL regex."""
+        result = _run(["scan", "http://github.com/owner/repo"])
         assert result.exit_code in (0, 1)
+
+    def test_preview_flag_shows_not_implemented_message(self):
+        """--preview should emit an explicit not-implemented warning."""
+        result = _run(["scan", "https://github.com/o/r", "--preview"])
+        assert "not yet implemented" in result.output.lower()
+
+    def test_recruiter_flag_shows_not_implemented_message(self):
+        """--recruiter should emit an explicit not-implemented warning."""
+        result = _run(["scan", "https://github.com/o/r", "--recruiter", "https://linkedin.com/in/fake"])
+        assert "not yet implemented" in result.output.lower()
 
 
 # ---------------------------------------------------------------------------
@@ -152,17 +161,15 @@ class TestCliScanFlags:
 
 
 class TestCliErrors:
-    """Verify error messages are user-friendly."""
+    """Verify error messages are user-friendly (no network calls)."""
 
     def test_invalid_url_error_message(self):
-        runner = CliRunner()
-        result = runner.invoke(cli, ["scan", "invalid"])
+        result = _run(["scan", "invalid"])
         assert result.exit_code != 0
         assert "Invalid GitHub URL" in result.output
 
     def test_empty_url_rejected(self):
-        runner = CliRunner()
-        result = runner.invoke(cli, ["scan", ""])
+        result = _run(["scan", ""])
         assert result.exit_code != 0
         assert "Invalid GitHub URL" in result.output
 
@@ -176,10 +183,5 @@ class TestMain:
     """Verify the main() entry point invokes the CLI."""
 
     def test_main_runs(self):
-        """main() is a thin wrapper that invokes the click group directly
-        via cli() — we test that the group works in other tests, so this
-        just confirms the wrapper function exists and is callable."""
         from repo_guard.cli import main
-        # main() calls cli() which is a click.Group — it will SystemExit
-        # when no args are given. We just verify the function is wired.
         assert callable(main)
