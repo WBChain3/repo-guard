@@ -195,7 +195,8 @@ def scan(
         raise SystemExit(1)
 
     # If the repo is empty (no default branch), we can still report on metadata.
-    is_empty = repo_info.get("size", 0) == 0
+    # Guard against None since GitHub API could return null for size.
+    is_empty = repo_info.get("size") is None or repo_info.get("size", 0) == 0
 
     # ------------------------------------------------------------------
     # 3. Run modules in order

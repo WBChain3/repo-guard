@@ -16,14 +16,13 @@ from __future__ import annotations
 import json
 import sys
 from datetime import datetime
-from typing import Any
 
 from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
 from rich.text import Text
 
-from repo_guard.models import Severity, ScanResult
+from repo_guard.models import ModuleResult, Severity, ScanResult
 
 
 # ---------------------------------------------------------------------------
@@ -35,6 +34,13 @@ SEVERITY_STYLES: dict[Severity, str] = {
     Severity.WARNING: "bold yellow",
     Severity.INFO: "bold cyan",
     Severity.CLEAN: "bold green",
+}
+
+SEVERITY_BORDER_STYLES: dict[Severity, str] = {
+    Severity.CRITICAL: "red",
+    Severity.WARNING: "yellow",
+    Severity.INFO: "blue",
+    Severity.CLEAN: "blue",
 }
 
 SEVERITY_LABELS: dict[Severity, str] = {
@@ -93,7 +99,7 @@ class TerminalReporter:
         self.console.print(Panel(header_text, border_style="blue"))
         self.console.print()  # blank line for spacing
 
-    def _render_module(self, module_result: Any) -> None:
+    def _render_module(self, module_result: ModuleResult) -> None:
         """
         Print a single module's results as a panel.
 
@@ -109,13 +115,8 @@ class TerminalReporter:
         table.add_column(style="bold")
         table.add_column()
 
-        # Module title row.
-        title = Text.assemble(
-            ("Module: ", "bold"),
-            (module_name, "bold"),
-            "  ",
-            _severity_tag(severity),
-        )
+        # Module title row — use a plain string so Panel renders it cleanly.
+        title = f"Module: {module_name}  [{severity.value}]"
 
         if not module_result.findings:
             table.add_row("  •", Text("No issues detected", style="green"))
@@ -132,7 +133,7 @@ class TerminalReporter:
             table,
             title=title,
             title_align="left",
-            border_style=severity_style if severity in (Severity.CRITICAL, Severity.WARNING) else "blue",
+            border_style=SEVERITY_BORDER_STYLES.get(severity, "blue"),
         )
         self.console.print(panel)
         self.console.print()
@@ -148,7 +149,7 @@ class TerminalReporter:
             (label, style),
         )
 
-        panel = Panel(summary, border_style=style.split()[-1] if style else "blue")
+        panel = Panel(summary, border_style=SEVERITY_BORDER_STYLES.get(overall, "blue"))
         self.console.print(panel)
 
 
