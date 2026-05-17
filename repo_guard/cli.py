@@ -20,6 +20,7 @@ import click
 from repo_guard.github_client import GitHubClient, GitHubClientError, NotFoundError, PrivateRepoError, parse_github_url
 from repo_guard.models import Severity, Finding, ModuleResult, ScanResult, highest_severity
 from repo_guard.modules.trust_score import scan as trust_score_scan
+from repo_guard.modules.hook_scanner import scan as hook_scanner_scan
 from repo_guard.reporter import render_scan_result
 
 
@@ -32,19 +33,7 @@ def _run_trust_score(client: GitHubClient, owner: str, repo: str) -> ModuleResul
 
 
 def _run_hook_scanner(client: GitHubClient, owner: str, repo: str) -> ModuleResult:
-    """Stub: placeholder for hook_scanner module."""
-    # TODO: Implement in Phase 3
-    return ModuleResult(
-        module_name="hook_scanner",
-        severity=Severity.INFO,
-        findings=[
-            Finding(
-                message="Hook scanner module not yet implemented. Skipping.",
-                severity=Severity.INFO,
-            )
-        ],
-        raw_data={},
-    )
+    return hook_scanner_scan(client, owner, repo)
 
 
 def _run_vscode_scanner(client: GitHubClient, owner: str, repo: str) -> ModuleResult:

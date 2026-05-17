@@ -33,7 +33,7 @@ FAKE_REPO_INFO = {
 def _run(args: list[str]) -> "Result":
     runner = CliRunner()
     with patch("repo_guard.cli.GitHubClient.get_repo_info", return_value=FAKE_REPO_INFO), \
-         patch("repo_guard.cli.GitHubClient.get_tree", return_value=[]), \
+         patch("repo_guard.cli.GitHubClient.get_tree", return_value=[{"path": "README.md", "type": "blob", "sha": "a", "size": 50}]), \
          patch("repo_guard.cli.GitHubClient.get_user_info", return_value={"created_at": "2024-01-01T00:00:00Z", "public_repos": 5, "followers": 10, "following": 3}), \
          patch("repo_guard.cli.GitHubClient.get_repos_for_user", return_value=[]), \
          patch("repo_guard.cli.GitHubClient.get_contributors", return_value=[]), \
