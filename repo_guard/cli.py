@@ -16,6 +16,8 @@ from datetime import datetime, timezone
 from typing import Any
 
 import click
+from rich.console import Console
+from rich.syntax import Syntax
 
 from repo_guard.github_client import GitHubClient, GitHubClientError, NotFoundError, PrivateRepoError, parse_github_url
 from repo_guard.models import Severity, Finding, ModuleResult, ScanResult, highest_severity
@@ -49,6 +51,82 @@ def _run_ioc_extractor(
     vt_key: str | None = None,
 ) -> ModuleResult:
     return ioc_extractor_scan(client, owner, repo, vt_key=vt_key)
+
+
+# ---------------------------------------------------------------------------
+# Preview helpers
+# ---------------------------------------------------------------------------
+
+
+def _preview_files(
+    client: GitHubClient,
+    owner: str,
+    repo: str,
+    module_results: list[ModuleResult],
+) -> None:
+    """
+    Offer to preview suspicious file contents in the terminal.
+
+    Only files that produced findings in hook_scanner or vscode_scanner
+    are eligible for preview. Prompts the user interactively.
+    """
+    # Collect file paths from module findings that have a "file" detail key.
+    preview_paths: list[str] = []
+    for module in module_results:
+        for finding in module.findings:
+            file_path = finding.details.get("file", "")
+            if file_path and file_path not in preview_paths:
+                preview_paths.append(file_path)
+
+    if not preview_paths:
+        return
+
+    console = Console()
+    answer = input("\nPreview suspicious files? [Y/n] ").strip().lower()
+    if answer in ("n", "no"):
+        console.print("[dim]Preview skipped.[/dim]")
+        return
+
+    console.print()
+    for file_path in preview_paths:
+        try:
+            content = client.get_file_content(owner, repo, file_path)
+        except GitHubClientError as exc:
+            console.print(f"[red]Could not preview {file_path}: {exc}[/red]")
+            continue
+
+        if content is None:
+            continue
+
+        # Attempt syntax highlighting; fall back to raw text.
+        ext = file_path.rsplit(".", 1)[-1].lower() if "." in file_path else ""
+        lexer_map = {
+            "py": "python",
+            "js": "javascript",
+            "ts": "typescript",
+            "json": "json",
+            "yaml": "yaml",
+            "yml": "yaml",
+            "md": "markdown",
+            "sh": "bash",
+            "bash": "bash",
+            "zsh": "bash",
+            "toml": "toml",
+            "ini": "ini",
+            "cfg": "ini",
+            "conf": "ini",
+        }
+        language = lexer_map.get(ext, "text")
+
+        try:
+            syntax = Syntax(content, language, theme="monokai", line_numbers=True)
+            console.print(f"[bold underline]{file_path}[/bold underline]")
+            console.print(syntax)
+        except Exception:
+            # Fallback: raw text if syntax highlighting fails.
+            console.print(f"[bold underline]{file_path}[/bold underline]")
+            console.print(content)
+        console.print()
 
 
 # ---------------------------------------------------------------------------
@@ -108,12 +186,6 @@ def scan(
     # ------------------------------------------------------------------
     # 3. Warn about unimplemented flags
     # ------------------------------------------------------------------
-    if preview:
-        click.echo(
-            "INFO: --preview mode is not yet implemented. Suspicious file "
-            "contents will not be displayed in this version.",
-            err=True,
-        )
     if recruiter:
         click.echo(
             f"INFO: --recruiter context is not yet implemented. "
@@ -191,7 +263,13 @@ def scan(
     render_scan_result(scan_result, json_output=json_output)
 
     # ------------------------------------------------------------------
-    # 8. Exit with status code reflecting severity
+    # 8. Preview suspicious files (--preview flag)
+    # ------------------------------------------------------------------
+    if preview and not json_output and overall_severity >= Severity.WARNING:
+        _preview_files(client, owner, repo_name, module_results)
+
+    # ------------------------------------------------------------------
+    # 9. Exit with status code reflecting severity
     # ------------------------------------------------------------------
     if overall_severity >= Severity.WARNING:
         raise SystemExit(1)

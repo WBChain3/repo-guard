@@ -122,7 +122,13 @@ class TestCliScanFlags:
         assert result.exit_code in (0, 1)
 
     def test_scan_with_preview(self):
+        """--preview flag is accepted (preview function handled separately)."""
         result = _run(["scan", "https://github.com/o/r", "--preview"])
+        assert result.exit_code in (0, 1)
+
+    def test_scan_with_preview_and_json(self):
+        """--preview + --json should not prompt (preview is terminal-only)."""
+        result = _run(["scan", "https://github.com/o/r", "--preview", "--json"])
         assert result.exit_code in (0, 1)
 
     def test_scan_with_recruiter(self):
@@ -145,11 +151,6 @@ class TestCliScanFlags:
         """http:// is parsed the same as https:// by our URL regex."""
         result = _run(["scan", "http://github.com/owner/repo"])
         assert result.exit_code in (0, 1)
-
-    def test_preview_flag_shows_not_implemented_message(self):
-        """--preview should emit an explicit not-implemented warning."""
-        result = _run(["scan", "https://github.com/o/r", "--preview"])
-        assert "not yet implemented" in result.output.lower()
 
     def test_recruiter_flag_shows_not_implemented_message(self):
         """--recruiter should emit an explicit not-implemented warning."""
