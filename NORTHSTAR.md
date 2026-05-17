@@ -437,6 +437,7 @@ All modules must return CLEAN for this fixture.
 5. **No scraping** — all data from official GitHub APIs.
 6. **No post-clone analysis** — this is pre-execution defense, not audit.
 7. **No live API calls in tests** — fixtures only, mocked network.
+8. **Every public method, class, and nontrivial block gets a docstring or inline comment** — another dev should be able to troubleshoot without reading the full plan.
 
 ---
 
