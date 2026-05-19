@@ -4,7 +4,7 @@
 Built the night I was targeted by a North Korean APT recruitment scam.
 
 > **Note**: VS Code 1.109+ (February 2026) disables automatic task execution
-> by default. This tool still matters — older versions remain vulnerable, the
+> by default. Older versions remain vulnerable, the
 > `.githooks/` vector is unaffected by the patch, and the VS Code fix can be
 > socially engineered around via the workspace trust prompt.
 
@@ -39,9 +39,8 @@ Before running anything, I inspected the code manually. What I found:
 - `.githooks/post-checkout` downloading and executing a remote payload from
   an external server across Mac, Linux, and Windows simultaneously, all output
   suppressed behind 40 lines of decoy comments
-- The project structure designed to have developers enter a wallet private key
-  into a local environment file — a standard Web3 pattern that, combined with
-  the already-executing payload, would enable direct key exfiltration
+- Private key social engineering via the .env.local README instruction, 
+  a backup vector in case the malware delivery fails or gets caught 
 
 The campaign is consistent with documented North Korean Lazarus Group /
 Contagious Interview recruitment scams targeting Web3 developers. Reports
@@ -172,7 +171,7 @@ repo_guard/
 ## Reported IOCs
 
 See [IOC_FEED.md](IOC_FEED.md) for findings from real-world scans.
-Community IOC submissions welcome — open an issue or PR.
+Community IOC submissions welcome - open an issue or PR.
 
 ## License
 
